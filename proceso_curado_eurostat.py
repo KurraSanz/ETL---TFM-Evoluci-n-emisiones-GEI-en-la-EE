@@ -3,19 +3,21 @@ Script de curación de datos Eurostat
 
 Descripción:
 Este script forma parte del pipeline ETL del TFM y tiene como objetivo limpiar y estandarizar 
-los archivos .csv provenientes de la EEA, previamente descargados y almacenados en la carpeta 
+los archivos .csv provenientes de la EUROSTAT, previamente descargados y almacenados en la carpeta 
 `ficheros_raw/eurostat`.
 
 Acciones que realiza el script:
 Acciones principales del script:
 1. Lee todos los archivos CSV ubicados en la carpeta de entrada `ficheros_raw/eurostat`.
 2. Elimina filas completamente vacías (`dropna(how='all')`).
-3. Filtra los registros para quedarse solo con aquellos cuya frecuencia sea anual (`freq == 'A'`).
+3. Elimina filas con valores nulos en columnas clave.
+4. Filtra los registros para quedarse solo con aquellos cuya frecuencia sea anual (`freq == 'A'`).
 4. Realiza la conversión de tipos:
    - `obs_value` se convierte a `float64`.
    - `TIME_PERIOD` se convierte a `int64`.
    - La conversión utiliza coerción para evitar errores y convertir valores inválidos en NaN.
-5. Guarda los archivos curados en la carpeta `ficheros_curado/eurostat` con el mismo nombre original.
+5. Eliminamos duplicados.
+6. Guarda los archivos curados en la carpeta `ficheros_curado/eurostat` con el mismo nombre original.
 
 '''
 
@@ -45,15 +47,22 @@ for archivo in tqdm(archivos_raw, desc="Limpiando y guardando archivos raw"):
         # 1) Eliminar filas completamente vacías
         df = df.dropna(how='all')
 
-        # 2) Quedarnos sólo con filas con frecuencia Anual
+        # 2) Eliminar filas con valores nulos en columnas clave
+        if 'TIME_PERIOD' in df.columns:
+            df = df[df['TIME_PERIOD'].notna()]
+
+        # 3) Quedarnos sólo con filas con frecuencia Anual
         df = df[df['freq'] == 'A']
         
-        # 3) Convertir 'obs_value' a float64 y TIME_PERIOD a int64. Coercion convierte errores a NaN
+        # 4) Convertir 'obs_value' a float64 y TIME_PERIOD a int64. Coercion convierte errores a NaN
         if 'obs_value' in df.columns:
             df['obs_value'] = pd.to_numeric(df['obs_value'], errors='coerce').astype('float64')
         if 'TIME_PERIOD' in df.columns:
             df['TIME_PERIOD'] = pd.to_numeric(df['TIME_PERIOD'], errors='coerce').astype('int64')
-            
+        
+        # 5) Eliminar registros duplicados
+        df = df.drop_duplicates()
+
         # Guardar CSV curado
         nombre = os.path.basename(archivo)
         ruta_curado = os.path.join(CARPETA_CURADO, nombre)
